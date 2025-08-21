@@ -1,0 +1,123 @@
+import psycopg2
+import pandas as pd
+import streamlit as st
+import uuid
+
+# Database connection details (replace with your actual details)
+DB_NAME = "Finance_Tracker"
+DB_USER = "postgres"
+DB_PASSWORD = "CDGP@68"
+DB_HOST = "localhost"
+
+def connect_db():
+    """Establishes a connection to the PostgreSQL database."""
+    try:
+        conn = psycopg2.connect(
+            dbname=DB_NAME,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            host=DB_HOST
+        )
+        return conn
+    except psycopg2.OperationalError as e:
+        st.error(f"Database connection error: {e}")
+        return None
+
+# --- CRUD Principles: CREATE ---
+def add_transaction(date, description, amount, type):
+    """Adds a new transaction to the database."""
+    conn = connect_db()
+    if not conn:
+        return False
+    
+    try:
+        with conn.cursor() as cur:
+            transaction_id = str(uuid.uuid4())
+            cur.execute(
+                "INSERT INTO transactions (transaction_id, transaction_date, description, amount, type) VALUES (%s, %s, %s, %s, %s)",
+                (transaction_id, date, description, amount, type)
+            )
+        conn.commit()
+        return True
+    except psycopg2.DatabaseError as e:
+        conn.rollback()
+        st.error(f"Failed to add transaction: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+# --- CRUD Principles: READ ---
+def get_transactions(transaction_type='All', sort_by='transaction_date'):
+    """Fetches transactions from the database based on type and sorting criteria."""
+    conn = connect_db()
+    if not conn:
+        return pd.DataFrame()
+
+    try:
+        with conn.cursor() as cur:
+            query = "SELECT * FROM transactions"
+            params = []
+
+            if transaction_type in ['Revenue', 'Expense']:
+                query += " WHERE type = %s"
+                params.append(transaction_type)
+
+            if sort_by == 'amount':
+                query += " ORDER BY amount DESC"
+            else:
+                query += " ORDER BY transaction_date DESC"
+
+            cur.execute(query, params)
+            rows = cur.fetchall()
+            columns = [desc[0] for desc in cur.description]
+            df = pd.DataFrame(rows, columns=columns)
+            return df
+    except psycopg2.DatabaseError as e:
+        st.error(f"Database error: {e}")
+        return pd.DataFrame()
+    finally:
+        if conn:
+            conn.close()
+
+# --- Aggregation Functions ---
+def get_aggregates():
+    """Calculates and returns key aggregate metrics."""
+    conn = connect_db()
+    if not conn:
+        return None
+
+    try:
+        with conn.cursor() as cur:
+            query = """
+            SELECT
+                COUNT(*),
+                COALESCE(SUM(CASE WHEN type = 'Revenue' THEN amount ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN type = 'Expense' THEN amount ELSE 0 END), 0)
+            FROM transactions;
+            """
+            cur.execute(query)
+            result = cur.fetchone()
+
+            if result:
+                return {
+                    'total_transactions': result[0],
+                    'total_revenue': result[1],
+                    'total_expense': result[2]
+                }
+            else:
+                return None
+    except psycopg2.DatabaseError as e:
+        st.error(f"Database error: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+def calculate_net_income():
+    """Calculates and returns the Net Income (Revenue - Expense)."""
+    aggregates = get_aggregates()
+    if aggregates:
+        net_income = aggregates['total_revenue'] - aggregates['total_expense']
+        return net_income
+    return 0
