@@ -7,6 +7,7 @@ st.set_page_config(layout="wide")
 
 # App title and description
 st.title('💰 Finance: Revenue & Expense Tracker')
+st.write("Maanasa | 30056")
 st.markdown("A quick overview of the company's financial health.")
 
 # --- CRUD Principles: CREATE ---
