@@ -1,0 +1,72 @@
+import streamlit as st
+import pandas as pd
+from backend_finance import get_transactions, get_aggregates, calculate_net_income, add_transaction
+
+# Set page configuration
+st.set_page_config(layout="wide")
+
+# App title and description
+st.title('💰 Finance: Revenue & Expense Tracker')
+st.markdown("A quick overview of the company's financial health.")
+
+# --- CRUD Principles: CREATE ---
+st.header('📝 Add New Transaction')
+with st.form("new_transaction_form"):
+    col1, col2 = st.columns(2)
+    with col1:
+        new_date = st.date_input("Transaction Date")
+        new_description = st.text_area("Description")
+    with col2:
+        new_type = st.selectbox("Type", ('Revenue', 'Expense'))
+        new_amount = st.number_input("Amount", min_value=0.01, format="%.2f")
+
+    submitted = st.form_submit_button("Add Transaction")
+    if submitted:
+        if new_amount > 0:
+            if add_transaction(new_date, new_description, new_amount, new_type):
+                st.success("Transaction added successfully!")
+            else:
+                st.error("Failed to add transaction. Please check your database connection.")
+        else:
+            st.warning("Amount must be greater than zero.")
+
+# --- CRUD Principles: READ & Filtering ---
+st.header('🔍 Transaction Viewer')
+st.markdown("Displaying all financial transactions.")
+
+# Filtering and Sorting options
+col1, col2 = st.columns(2)
+with col1:
+    transaction_type = st.selectbox('Filter by Type', ('All', 'Revenue', 'Expense'))
+with col2:
+    sort_by = st.selectbox('Sort by', ('transaction_date', 'amount'))
+
+# Fetch and display data
+transactions_df = get_transactions(transaction_type=transaction_type, sort_by=sort_by)
+
+if not transactions_df.empty:
+    st.dataframe(transactions_df, use_container_width=True)
+else:
+    st.info("No transactions found.")
+
+# --- Aggregation and Business Insights ---
+st.header('📊 Financial Overview & Insights')
+st.markdown("Key metrics to monitor the company's financial health.")
+
+# Get aggregate data
+aggregates = get_aggregates()
+
+# Display key metrics using st.metric
+if aggregates:
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric(label="Total Transactions", value=f"{aggregates['total_transactions']}")
+    with col2:
+        st.metric(label="Total Revenue", value=f"${aggregates['total_revenue']:,}")
+    with col3:
+        st.metric(label="Total Expense", value=f"${aggregates['total_expense']:,}")
+    with col4:
+        net_income = calculate_net_income()
+        st.metric(label="Net Income", value=f"${net_income:,}")
+else:
+    st.warning("Could not retrieve aggregate data. Please check the database connection.")
